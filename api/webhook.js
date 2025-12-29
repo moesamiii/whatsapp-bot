@@ -1,46 +1,60 @@
 export default async function handler(req, res) {
-  // Verify webhook
+  // =========================
+  // 1️⃣ WEBHOOK VERIFICATION (GET)
+  // =========================
   if (req.method === "GET") {
-    const verifyToken = "MY_VERIFY_TOKEN";
-
-    const mode = req.query["hub.mode"];
-    const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
 
-    if (mode === "subscribe" && token === verifyToken) {
+    if (challenge) {
+      console.log("Webhook verification challenge:", challenge);
       return res.status(200).send(challenge);
     }
+
     return res.status(403).send("Forbidden");
   }
 
-  // Receive messages
+  // =========================
+  // 2️⃣ RECEIVE MESSAGES (POST)
+  // =========================
   if (req.method === "POST") {
-    const entry = req.body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const messages = value?.messages;
+    try {
+      const entry = req.body?.entry?.[0];
+      const changes = entry?.changes?.[0];
+      const value = changes?.value;
+      const messages = value?.messages;
 
-    if (messages?.length) {
-      const message = messages[0];
-      const from = message.from;
-      const text = message.text?.body?.toLowerCase();
+      if (messages && messages.length > 0) {
+        const message = messages[0];
+        const from = message.from;
+        const text = message.text?.body?.trim().toLowerCase();
 
-      if (text === "hi") {
-        await sendWhatsAppMessage(from, "Hello 👋 How can I help you?");
+        console.log("Incoming message:", text);
+
+        if (text === "hi") {
+          await sendWhatsAppMessage(from, "Hello 👋 How can I help you?");
+        }
       }
-    }
 
-    return res.status(200).json({ status: "ok" });
+      return res.status(200).json({ status: "ok" });
+    } catch (error) {
+      console.error("Webhook error:", error);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
   }
 
-  res.status(405).send("Method Not Allowed");
+  return res.status(405).send("Method Not Allowed");
 }
 
+// =========================
+// 3️⃣ SEND MESSAGE FUNCTION
+// =========================
 async function sendWhatsAppMessage(to, message) {
   const token = process.env.WHATSAPP_TOKEN;
   const phoneNumberId = process.env.PHONE_NUMBER_ID;
 
-  await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+  const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+
+  await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -49,7 +63,9 @@ async function sendWhatsAppMessage(to, message) {
     body: JSON.stringify({
       messaging_product: "whatsapp",
       to,
-      text: { body: message },
+      text: {
+        body: message,
+      },
     }),
   });
 }
